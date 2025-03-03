@@ -4,11 +4,15 @@ from pydantic import BaseModel
 from typing import List, Optional
 import autogen
 import os
+from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import logging
 from datetime import datetime
+
+# Load environment variables
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -26,18 +30,18 @@ app.add_middleware(
 )
 
 # Initialize OpenAI client
-openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("OPENAI_API_KEY environment variable is not set")
 
 config_list = [{"model": "gpt-4", "api_key": openai_api_key}]
 
 # Database connection
-DB_NAME = os.getenv("DB_NAME", "voicebot")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.environ.get("DB_NAME", "voicebot")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("DB_PORT", "5432")
 
 def get_db_connection():
     return psycopg2.connect(
