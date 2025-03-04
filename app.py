@@ -126,6 +126,11 @@ Provide the extracted information in a JSON format. If any information is not av
 )
 
 def insert_case_details(case_details: CaseDetails):
+    # Check if any of the important fields are empty
+    if not all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
+        logger.info("Skipping case insertion due to incomplete information")
+        return False
+
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -141,6 +146,7 @@ def insert_case_details(case_details: CaseDetails):
     conn.commit()
     cur.close()
     conn.close()
+    return True
 
 @app.post("/chat", response_model=ConversationResponse)
 async def chat(request: ConversationRequest):
@@ -163,16 +169,19 @@ async def chat(request: ConversationRequest):
         case_details = extract_case_details(updated_history)
         logger.debug(f"Extracted case details: {case_details}")
         
-        # Insert case details into the database
-        logger.debug("Inserting case details into database")
-        insert_case_details(case_details)
-        
-        if case_details.appointment_date_time:
-            logger.debug(f"Scheduling call back for {case_details.appointment_date_time}")
-            schedule_call_back(case_details.appointment_date_time)
-            if case_details.email_address:
+        # Insert case details into the database only if all fields are non-empty
+        if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
+            logger.debug("Inserting case details into database")
+            insert_success = insert_case_details(case_details)
+            if insert_success:
+                logger.debug(f"Scheduling call back for {case_details.appointment_date_time}")
+                schedule_call_back(case_details.appointment_date_time)
                 logger.debug(f"Sending confirmation email to {case_details.email_address}")
                 send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
+            else:
+                logger.debug("Case details not inserted due to incomplete information")
+        else:
+            logger.debug("Skipping case insertion due to incomplete information")
         
         return ConversationResponse(
             ai_response=ai_response,
