@@ -170,7 +170,7 @@ As an AI assistant for Skillsfuture and Workforce Singapore hotline:
 4. Provide information on Skillsfuture credits and suitable courses.
 5. Schedule a callback appointment, requesting explicit booking time (year, month, date, hour).
 6. Maintain a friendly and professional tone throughout.
-Be adaptive and responsive to user needs and interests.
+Be adaptive and responsive to user needs and interests. Also be more concise contents
 """
 
 # Create the assistant agent with built-in memory
