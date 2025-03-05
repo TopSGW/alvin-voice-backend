@@ -126,14 +126,25 @@ class MilvusHandler:
         index_params = {
             "metric_type": "IP",
             "index_type": "IVF_FLAT",
-            "params": {}
+            "params": {"nlist": 128}
         }
-
-        self.milvus_client.create_index(
-            collection_name=self.collection_name,
+        self.milvus_client.release_collection(collection_name=self.collection_name)
+        self.milvus_client.drop_index(
+            collection_name=self.collection_name, index_name="vector"
+        )
+        index_params = self.milvus_client.prepare_index_params()
+        index_params.add_index(
             field_name="vector",
-            index_params=index_params,
-            sync=True
+            index_name="vector_index",
+            index_type="FLAT", 
+            metric_type="IP", 
+            params={
+                # "M": 16,
+                # "efConstruction": 500,
+            },
+        )
+        self.milvus_client.create_index(
+            collection_name=self.collection_name, index_params=index_params, sync=True
         )
 
     def insert_data(self, vector_data):
