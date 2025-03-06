@@ -174,14 +174,16 @@ class OpenAIHandler:
         return self.client.embeddings.create(input=text, model="text-embedding-3-small").data[0].embedding
 
 system_prompt = """
-As an AI assistant for Skillsfuture and Workforce Singapore hotline:
-1. Greet users with: "Hi, thanks for contacting Skillsfuture and Workforce Singapore hotline. Please tell me your inquiry and I will record it and schedule a call back appointment for you."
-2. Collect case details: inquiry, name, mobile number, email address.
-3. Ask relevant questions about user's background and needs.
-4. Provide information on Skillsfuture credits and suitable courses.
-5. Schedule a callback appointment, requesting explicit booking time (year, month, date, hour).
-6. Maintain a friendly and professional tone throughout.
-Be adaptive and responsive to user needs and interests. Also be more concise contents
+You are an AI assistant for the Skillsfuture and Workforce Singapore hotline website. Your goals are:
+
+1. Greet users with a standard message: "Hi, thanks for contacting Skillsfuture and Workforce Singapore hotline. Please tell me your inquiry and I will have it recorded and schedule a call back appointment for you."
+2. Collect and record case details including the inquiry, person's name, mobile number, and email address.
+3. Ask relevant questions to gather more information about the user's background and needs.
+4. Provide information about Skillsfuture credits and suitable courses based on the user's background.
+5. Please schedule a callback appointment with an officer. Request that the user provide an explicit booking time including the year, month, date, and the hour. For example: 'Could you provide the exact date and time, including year, month, day, and hour, so I can schedule the officer's callback accordingly?'
+6. Maintain a friendly and professional tone throughout the conversation.
+
+Be adaptive and responsive to the user's needs and interests.
 """
 
 # Create the assistant agent with built-in memory
@@ -194,13 +196,14 @@ assistant = ConversableAgent(
 
 extraction_assistant = ConversableAgent(
     name="Extraction_Assistant",
-    system_message="""Extract the following from the conversation:
-1. Inquiry: Main question or concern.
-2. Name: User's name.
-3. Mobile Number: User's phone number.
-4. Email Address: User's email address.
-5. Appointment Date and Time: Scheduled callback time (ISO format YYYY-MM-DDTHH:MM:SS or empty string).
-Provide extracted information in JSON format. Use empty strings for unavailable information.""",
+    system_message="""You are an AI assistant specialized in extracting specific information from conversations. Your task is to extract the following details from the given conversation:
+1. Inquiry: The main question or concern of the user.
+2. Name: The user's name.
+3. Mobile Number: The user's phone number.
+4. Email Address: The user's email address.
+5. Appointment Date and Time: The scheduled callback time. Please provide this in ISO format (YYYY-MM-DDTHH:MM:SS) if available, otherwise leave it as an empty string.
+
+Provide the extracted information in a JSON format. If any information is not available, leave it as an empty string.""",
     llm_config={"config_list": config_list},
     human_input_mode="NEVER"
 )
@@ -301,17 +304,19 @@ async def chat(request: ConversationRequest):
 
 def extract_case_details(conversation_history: List[Message]) -> CaseDetails:
     conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in conversation_history])
-    extraction_prompt = f"""Extract case details from the conversation:
+    extraction_prompt = f"""Please extract the case details from the following conversation:
+
 {conversation_text}
-Provide JSON format:
+
+Provide the extracted information in the following JSON format:
 {{
     "inquiry": "Extracted Inquiry",
     "name": "Extracted Name",
     "mobile_number": "Extracted Mobile Number",
     "email_address": "Extracted Email Address",
-    "appointment_date_time": "YYYY-MM-DDTHH:MM:SS or empty string"
+    "appointment_date_time": "Extracted Appointment Date and Time in ISO format (YYYY-MM-DDTHH:MM:SS) or empty string if not available"
 }}
-Use empty strings for unavailable information."""
+If any information is not available, leave it as an empty string."""
     
     extraction_result = extraction_assistant.generate_reply(messages=[{"role": "user", "content": extraction_prompt}])
     extraction_content = extraction_result[1] if isinstance(extraction_result, tuple) and len(extraction_result) > 1 else ""
