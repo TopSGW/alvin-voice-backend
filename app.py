@@ -330,13 +330,25 @@ If any information is not available, leave it as an empty string."""
     extraction_content = extraction_result[1] if isinstance(extraction_result, tuple) and len(extraction_result) > 1 else ""
     
     try:
+        # Log the extraction content for debugging
+        logger.debug(f"Extraction content: {extraction_content}")
+        
+        # Check if the extraction content is empty or not a valid JSON
+        if not extraction_content.strip():
+            logger.error("Extraction result is empty")
+            return CaseDetails()
+        
         extracted_data = json.loads(extraction_content)
         if extracted_data["appointment_date_time"]:
             extracted_data["appointment_date_time"] = datetime.fromisoformat(extracted_data["appointment_date_time"])
         else:
             extracted_data["appointment_date_time"] = None
         return CaseDetails(**extracted_data)
-    except (json.JSONDecodeError, ValueError) as e:
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON: {str(e)}")
+        logger.error(f"Invalid JSON content: {extraction_content}")
+        return CaseDetails()
+    except ValueError as e:
         logger.error(f"Error processing extraction result: {str(e)}")
         return CaseDetails()
 
