@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from autogen import ConversableAgent
+import autogen
 import os
 from dotenv import load_dotenv
 import psycopg2
@@ -187,15 +188,13 @@ You are an AI assistant for the Skillsfuture and Workforce Singapore hotline web
 Be adaptive and responsive to the user's needs and interests.
 """
 
-# Create the assistant agent with built-in memory
-assistant = ConversableAgent(
+assistant = autogen.AssistantAgent(
     name="SkillsFuture_Assistant",
     system_message=system_prompt,
     llm_config={"config_list": config_list},
-    human_input_mode="TERMINATE"
 )
 
-extraction_assistant = ConversableAgent(
+extraction_assistant = autogen.AssistantAgent(
     name="Extraction_Assistant",
     system_message="""You are an AI assistant specialized in extracting specific information from conversations. Your task is to extract the following details from the given conversation:
 1. Inquiry: The main question or concern of the user.
@@ -206,7 +205,6 @@ extraction_assistant = ConversableAgent(
 
 Provide the extracted information in a JSON format. If any information is not available, leave it as an empty string.""",
     llm_config={"config_list": config_list},
-    human_input_mode="NEVER"
 )
 
 milvus_handler = MilvusHandler()
