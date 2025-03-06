@@ -191,7 +191,7 @@ assistant = ConversableAgent(
     name="SkillsFuture_Assistant",
     system_message=system_prompt,
     llm_config={"config_list": config_list},
-    human_input_mode="NEVER"
+    human_input_mode="TERMINATE"
 )
 
 extraction_assistant = ConversableAgent(
