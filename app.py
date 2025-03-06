@@ -201,8 +201,7 @@ extraction_assistant = autogen.AssistantAgent(
 2. Name: The user's name.
 3. Mobile Number: The user's phone number.
 4. Email Address: The user's email address.
-5. Appointment Date and Time: The scheduled callback time. Please provide this in ISO format (YYYY-MM-DDTHH:MM:SS) if available, otherwise leave it as an empty string.
-
+5. Appointment Date and Time: This field should reflect the scheduled callback time. If provided, please format the date and time in ISO 8601 format (YYYY-MM-DDTHH:MM:SS). If the user does not supply a complete booking time—including the year, month, day, and hour—this field should be left as an empty string.
 Provide the extracted information in a JSON format. If any information is not available, leave it as an empty string.""",
     llm_config={"config_list": config_list},
 )
@@ -286,7 +285,7 @@ async def chat(request: ConversationRequest):
             if search_result:
                 case_details.category_text = search_result[0][0]['entity']['text']
                 case_details.divide_text = search_result[0][0]['entity']['divide_text']
-
+            ai_response = ai_response + "\n" + "tag: " + case_details.category_text + "\n" + "division: " + case_details.divide_text + "\n"
             if insert_case_details(case_details):
                 schedule_call_back(case_details.appointment_date_time)
                 send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
