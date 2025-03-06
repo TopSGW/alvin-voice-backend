@@ -231,7 +231,7 @@ def load_category_and_divide_text():
     logger.info(f"Loaded {len(vector_data)} items into Milvus")
 
 # Load category and divide text data into Milvus when the application starts
-load_category_and_divide_text()
+# load_category_and_divide_text()
 
 def insert_case_details(case_details: CaseDetails):
     if not all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
