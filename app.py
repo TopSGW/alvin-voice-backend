@@ -263,15 +263,12 @@ async def chat(request: ConversationRequest):
         # Prepare the conversation history
         conversation = [{"role": msg.role, "content": msg.content} for msg in request.conversation_history]
         conversation.append({"role": "user", "content": request.user_input})
-                
+
         # Generate response using the AssistantAgent
-        response = assistant.generate_reply(messages=conversation)
-        ai_response = response[1].strip() if isinstance(response, tuple) and len(response) > 1 else ""
-        
-        # Limit response length if needed
-        max_response_length = 500  # Adjust as needed
-        if len(ai_response) > max_response_length:
-            ai_response = ai_response[:max_response_length].rsplit(' ', 1)[0] + '...'
+        logger.debug("Generating reply using AssistantAgent")
+        response = assistant.generate_reply(conversation)
+        ai_response = response
+        logger.debug(f"AssistantAgent response: {ai_response}")
         
         # Update conversation history
         updated_history = request.conversation_history + [
@@ -280,16 +277,16 @@ async def chat(request: ConversationRequest):
         ]
         
         case_details = extract_case_details(updated_history)
-        
-        # Get category and divide text using Milvus
-        embedding = openai_handler.emb_text(case_details.inquiry)
-        search_result = milvus_handler.search(embedding)
-        if search_result:
-            case_details.category_text = search_result[0][0]['entity']['text']
-            case_details.divide_text = search_result[0][0]['entity']['divide_text']
-        
+                
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
+            # Get category and divide text using Milvus
+            embedding = openai_handler.emb_text(case_details.inquiry)
+            search_result = milvus_handler.search(embedding)
+            if search_result:
+                case_details.category_text = search_result[0][0]['entity']['text']
+                case_details.divide_text = search_result[0][0]['entity']['divide_text']
+
             if insert_case_details(case_details):
                 schedule_call_back(case_details.appointment_date_time)
                 send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
