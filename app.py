@@ -261,8 +261,9 @@ def insert_case_details(case_details: CaseDetails):
 async def chat(request: ConversationRequest):
     try:
         # Prepare the conversation history
-        conversation = [{"role": "user", "content": request.user_input}]
-        
+        conversation = [{"role": msg.role, "content": msg.content} for msg in request.conversation_history]
+        conversation.append({"role": "user", "content": request.user_input})
+                
         # Generate response using the AssistantAgent
         response = assistant.generate_reply(messages=conversation)
         ai_response = response[1].strip() if isinstance(response, tuple) and len(response) > 1 else ""
