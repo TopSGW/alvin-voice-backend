@@ -115,37 +115,38 @@ class MilvusHandler:
         schema = CollectionSchema(fields, "Collection for storing text + embeddings")
 
         if self.milvus_client.has_collection(collection_name=self.collection_name):
-            self.milvus_client.drop_collection(collection_name=self.collection_name)
+            print("collection is existing!")
 
-        self.milvus_client.create_collection(
-            collection_name=self.collection_name, 
-            schema=schema, 
-            metric_type='IP'
-        )
+        else: 
+            self.milvus_client.create_collection(
+                collection_name=self.collection_name, 
+                schema=schema, 
+                metric_type='IP'
+            )
 
-        index_params = {
-            "metric_type": "IP",
-            "index_type": "IVF_FLAT",
-            "params": {"nlist": 128}
-        }
-        self.milvus_client.release_collection(collection_name=self.collection_name)
-        self.milvus_client.drop_index(
-            collection_name=self.collection_name, index_name="vector"
-        )
-        index_params = self.milvus_client.prepare_index_params()
-        index_params.add_index(
-            field_name="vector",
-            index_name="vector_index",
-            index_type="FLAT", 
-            metric_type="IP", 
-            params={
-                # "M": 16,
-                # "efConstruction": 500,
-            },
-        )
-        self.milvus_client.create_index(
-            collection_name=self.collection_name, index_params=index_params, sync=True
-        )
+            index_params = {
+                "metric_type": "IP",
+                "index_type": "IVF_FLAT",
+                "params": {"nlist": 128}
+            }
+            self.milvus_client.release_collection(collection_name=self.collection_name)
+            self.milvus_client.drop_index(
+                collection_name=self.collection_name, index_name="vector"
+            )
+            index_params = self.milvus_client.prepare_index_params()
+            index_params.add_index(
+                field_name="vector",
+                index_name="vector_index",
+                index_type="FLAT", 
+                metric_type="IP", 
+                params={
+                    # "M": 16,
+                    # "efConstruction": 500,
+                },
+            )
+            self.milvus_client.create_index(
+                collection_name=self.collection_name, index_params=index_params, sync=True
+            )
 
     def insert_data(self, vector_data):
         self.milvus_client.insert(
@@ -212,6 +213,7 @@ milvus_handler = MilvusHandler()
 openai_handler = OpenAIHandler()
 
 def load_category_and_divide_text():
+
     with open("category.txt", "r", encoding="utf-8") as f:
         category_contents = [line.strip() for line in f if line.strip()]
     
@@ -231,7 +233,7 @@ def load_category_and_divide_text():
     logger.info(f"Loaded {len(vector_data)} items into Milvus")
 
 # Load category and divide text data into Milvus when the application starts
-# load_category_and_divide_text()
+load_category_and_divide_text()
 
 def insert_case_details(case_details: CaseDetails):
     if not all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
