@@ -326,23 +326,36 @@ Provide the extracted information in the following JSON format:
 }}
 If any information is not available, leave it as an empty string."""
     
+    logger.debug(f"Extraction prompt: {extraction_prompt}")
+    
     extraction_result = extraction_assistant.generate_reply(messages=[{"role": "user", "content": extraction_prompt}])
-    extraction_content = extraction_result[1] if isinstance(extraction_result, tuple) and len(extraction_result) > 1 else ""
+    logger.debug(f"Raw extraction result: {extraction_result}")
+    
+    extraction_content = extraction_result[1] if isinstance(extraction_result, tuple) and len(extraction_result) > 1 else extraction_result
+    logger.debug(f"Extraction content: {extraction_content}")
     
     try:
-        # Log the extraction content for debugging
-        logger.debug(f"Extraction content: {extraction_content}")
-        
-        # Check if the extraction content is empty or not a valid JSON
-        if not extraction_content.strip():
+        if not extraction_content or not extraction_content.strip():
             logger.error("Extraction result is empty")
             return CaseDetails()
         
-        extracted_data = json.loads(extraction_content)
+        # Try to find JSON content within the extraction result
+        json_start = extraction_content.find('{')
+        json_end = extraction_content.rfind('}') + 1
+        if json_start != -1 and json_end != -1:
+            json_content = extraction_content[json_start:json_end]
+            logger.debug(f"Extracted JSON content: {json_content}")
+            extracted_data = json.loads(json_content)
+        else:
+            logger.error("No valid JSON found in extraction content")
+            return CaseDetails()
+        
         if extracted_data["appointment_date_time"]:
             extracted_data["appointment_date_time"] = datetime.fromisoformat(extracted_data["appointment_date_time"])
         else:
             extracted_data["appointment_date_time"] = None
+        
+        logger.info(f"Successfully extracted case details: {extracted_data}")
         return CaseDetails(**extracted_data)
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding JSON: {str(e)}")
