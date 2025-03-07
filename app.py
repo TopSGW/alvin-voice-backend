@@ -10,7 +10,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pymilvus import MilvusClient, FieldSchema, CollectionSchema, DataType
 from openai import OpenAI
 
@@ -140,10 +140,7 @@ class MilvusHandler:
                 index_name="vector_index",
                 index_type="FLAT", 
                 metric_type="IP", 
-                params={
-                    # "M": 16,
-                    # "efConstruction": 500,
-                },
+                params={},
             )
             self.milvus_client.create_index(
                 collection_name=self.collection_name, index_params=index_params, sync=True
@@ -220,7 +217,6 @@ milvus_handler = MilvusHandler()
 openai_handler = OpenAIHandler()
 
 def load_category_and_divide_text():
-
     with open("category.txt", "r", encoding="utf-8") as f:
         category_contents = [line.strip() for line in f if line.strip()]
     
@@ -286,7 +282,11 @@ async def chat(request: ConversationRequest):
         ]
         
         case_details = extract_case_details(updated_history)
-                
+        
+        # Check if the appointment date is in the past
+        if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
+            ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
+        
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
             # Get category and divide text using Milvus
@@ -351,7 +351,15 @@ If any information is not available, leave it as an empty string."""
             return CaseDetails()
         
         if extracted_data["appointment_date_time"]:
-            extracted_data["appointment_date_time"] = datetime.fromisoformat(extracted_data["appointment_date_time"])
+            appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"])
+            current_datetime = datetime.now(timezone.utc)
+            
+            # Check if the appointment date is in the past
+            if appointment_datetime < current_datetime:
+                logger.warning("Appointment date is in the past. Setting appointment_date_time to None.")
+                extracted_data["appointment_date_time"] = None
+            else:
+                extracted_data["appointment_date_time"] = appointment_datetime
         else:
             extracted_data["appointment_date_time"] = None
         
