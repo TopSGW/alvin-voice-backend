@@ -285,7 +285,7 @@ async def chat(request: ConversationRequest):
         
         # Check if the appointment date is in the past
         if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
-            ai_response = "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
+            ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
         
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
