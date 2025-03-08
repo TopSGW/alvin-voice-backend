@@ -351,7 +351,7 @@ If any information is not available, leave it as an empty string."""
             return CaseDetails()
         
         if extracted_data["appointment_date_time"]:
-            appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"])
+            appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"]).replace(tzinfo=timezone.utc)
             current_datetime = datetime.now(timezone.utc)
             
             # Check if the appointment date is in the past
