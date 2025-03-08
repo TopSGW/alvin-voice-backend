@@ -303,7 +303,7 @@ async def chat(request: ConversationRequest):
 
         print("case details : ", case_details)        
         # Check if the appointment date is in the past
-        if(validate_date(case_details.appointment_date_time)):
+        if(validate_date(case_details.appointment_date_time) == False):
 
             print("fffffffffffffffddddddddddate", case_details.appointment_date_time)
             ai_response = "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"   
