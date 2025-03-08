@@ -10,7 +10,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pymilvus import MilvusClient, FieldSchema, CollectionSchema, DataType
 from openai import OpenAI
 
@@ -262,18 +262,23 @@ def insert_case_details(case_details: CaseDetails):
     conn.close()
     return True
 
-def validate_date(input_date:str):
-    if input_date == "":
+def validate_date(input_date: datetime) -> bool:
+    if input_date is None:
         return False
 
-    appointment_datetime = datetime.fromisoformat(input_date).replace(tzinfo=timezone.utc)
+    # If the provided datetime is naive (no tzinfo), assume UTC.
+    if input_date.tzinfo is None:
+        input_date = input_date.replace(tzinfo=timezone.utc)
+    else:
+        # Convert to UTC for a fair comparison
+        input_date = input_date.astimezone(timezone.utc)
+
     current_datetime = datetime.now(timezone.utc)
-    
-    # Check if the appointment date is in the past
-    if appointment_datetime < current_datetime:
-        return True
-    
-    return False
+    max_valid_date = current_datetime + timedelta(hours=24)
+
+    # Check that the appointment is in the future but within 24 hours.
+    return current_datetime < input_date <= max_valid_date
+
 
 @app.post("/chat", response_model=ConversationResponse)
 async def chat(request: ConversationRequest):
