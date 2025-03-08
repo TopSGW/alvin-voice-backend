@@ -262,6 +262,19 @@ def insert_case_details(case_details: CaseDetails):
     conn.close()
     return True
 
+def validate_date(input_date:str):
+    if input_date == "":
+        return False
+
+    appointment_datetime = datetime.fromisoformat(input_date).replace(tzinfo=timezone.utc)
+    current_datetime = datetime.now(timezone.utc)
+    
+    # Check if the appointment date is in the past
+    if appointment_datetime < current_datetime:
+        return True
+    
+    return False
+
 @app.post("/chat", response_model=ConversationResponse)
 async def chat(request: ConversationRequest):
     try:
@@ -284,8 +297,16 @@ async def chat(request: ConversationRequest):
         case_details = extract_case_details(updated_history)
         
         # Check if the appointment date is in the past
-        if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
-            ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
+        if(validate_date(case_details.appointment_date_time)):
+            ai_response = "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"   
+            return ConversationResponse(
+                ai_response=ai_response,
+                updated_history=updated_history,
+                case_details=case_details
+            )
+
+        # if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
+        #     ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
         
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
@@ -350,18 +371,18 @@ If any information is not available, leave it as an empty string."""
             logger.error("No valid JSON found in extraction content")
             return CaseDetails()
         
-        if extracted_data["appointment_date_time"]:
-            appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"]).replace(tzinfo=timezone.utc)
-            current_datetime = datetime.now(timezone.utc)
+        # if extracted_data["appointment_date_time"]:
+        #     appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"]).replace(tzinfo=timezone.utc)
+        #     current_datetime = datetime.now(timezone.utc)
             
             # Check if the appointment date is in the past
-            if appointment_datetime < current_datetime:
-                logger.warning("Appointment date is in the past. Setting appointment_date_time to None.")
-                extracted_data["appointment_date_time"] = None
-            else:
-                extracted_data["appointment_date_time"] = appointment_datetime
-        else:
-            extracted_data["appointment_date_time"] = None
+        #     if appointment_datetime < current_datetime:
+        #         logger.warning("Appointment date is in the past. Setting appointment_date_time to None.")
+        #         extracted_data["appointment_date_time"] = None
+        #     else:
+        #         extracted_data["appointment_date_time"] = appointment_datetime
+        # else:
+        #     extracted_data["appointment_date_time"] = None
         
         logger.info(f"Successfully extracted case details: {extracted_data}")
         return CaseDetails(**extracted_data)
