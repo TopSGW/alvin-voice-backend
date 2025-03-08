@@ -262,27 +262,29 @@ def insert_case_details(case_details: CaseDetails):
     conn.close()
     return True
 
+from datetime import datetime
+
+# Example appointment input
+appointment_date_time = datetime(2025, 5, 21, 16, 0)
+
 def validate_date(input_date: datetime) -> bool:
-    # If input_date is None, immediately return False
     if input_date is None:
         return False
 
-    # Get the local timezone from current time
+    # Determine local timezone from current time
     local_tz = datetime.now().astimezone().tzinfo
 
-    # If the provided datetime is naive (without tzinfo), assume it is in local time.
+    # If input_date is naive, assume it's in local time
     if input_date.tzinfo is None:
         input_date = input_date.replace(tzinfo=local_tz)
     else:
-        # Otherwise, convert it to local time
         input_date = input_date.astimezone(local_tz)
 
-    # Get current time and define maximum valid time (24 hours from now)
     current_datetime = datetime.now(local_tz)
-    max_valid_date = current_datetime + timedelta(hours=24)
 
-    # Return True only if the appointment is in the future and within 24 hours from now.
-    return current_datetime < input_date <= max_valid_date
+    # Return True if input_date is in the future (ignoring 24-hour window)
+    return input_date > current_datetime
+
 
 @app.post("/chat", response_model=ConversationResponse)
 async def chat(request: ConversationRequest):
