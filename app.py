@@ -318,6 +318,10 @@ async def chat(request: ConversationRequest):
         case_details = extract_case_details(updated_history)
 
         print("case details : ", case_details)        
+                
+        
+        print("type >>>>>>>>>>>>>>>>", type(case_details.email_address))
+
         # Check if the appointment date is in the past
         if(validate_date(case_details.appointment_date_time) == False):
 
@@ -331,7 +335,6 @@ async def chat(request: ConversationRequest):
 
         # if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
         #     ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
-        print("type >>>>>>>>>>>>>>>>", type(case_details.email_address))
         if(validate_email(case_details.email_address) == False):
             print ("email address >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Invalide <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
             ai_response = "The email address you entered appears to be invalid. Please provide a valid email address."
