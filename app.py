@@ -266,9 +266,12 @@ from datetime import datetime
 # Example appointment input
 appointment_date_time = datetime(2025, 5, 21, 16, 0)
 
-def validate_date(input_date: datetime) -> bool:
+def validate_date(input_date: datetime | str) -> bool:
+    if input_date == "":
+        return True
+
     if input_date is None:
-        return False
+        return True
 
     # Determine local timezone from current time
     local_tz = datetime.now().astimezone().tzinfo
