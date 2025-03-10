@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from pymilvus import MilvusClient, FieldSchema, CollectionSchema, DataType
 from openai import OpenAI
-
+import re
 # Load environment variables
 load_dotenv()
 
@@ -284,6 +284,17 @@ def validate_date(input_date: datetime) -> bool:
     # Return True if input_date is in the future (ignoring 24-hour window)
     return input_date > current_datetime
 
+def validate_email(email: str) -> bool:
+    if email == "":     
+        return True
+    """
+    Returns True if the given email matches a basic validation pattern,
+    otherwise returns False.
+    """
+    # Regex pattern: one or more allowed characters in the local part,
+    # then an '@', then allowed domain characters and a TLD of at least 2 letters.
+    pattern = r"^[\w\.\+\-]+@[\w\.\-]+\.[a-zA-Z]{2,}$"
+    return re.fullmatch(pattern, email) is not None
 
 @app.post("/chat", response_model=ConversationResponse)
 async def chat(request: ConversationRequest):
@@ -321,6 +332,14 @@ async def chat(request: ConversationRequest):
         # if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
         #     ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
         
+        if(validate_email(case_details.email_address) == False):
+            print ("email address >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Invalide <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+            ai_response = "The email address you entered appears to be invalid. Please provide a valid email address."
+            return ConversationResponse(
+                ai_response=ai_response,
+                updated_history=updated_history,
+                case_details=case_details
+            )
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
             # Get category and divide text using Milvus
