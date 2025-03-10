@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 from autogen import ConversableAgent
 import autogen
@@ -14,6 +14,14 @@ from datetime import datetime, timezone, timedelta
 from pymilvus import MilvusClient, FieldSchema, CollectionSchema, DataType
 from openai import OpenAI
 import re
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Load environment variables
 load_dotenv()
 
@@ -21,7 +29,11 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Set up rate limiting
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS
 app.add_middleware(
@@ -72,11 +84,31 @@ def create_table():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        hashed_password VARCHAR(100) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
     conn.commit()
     cur.close()
     conn.close()
 
 create_table()
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT settings
+SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 class Message(BaseModel):
     role: str
@@ -100,6 +132,17 @@ class ConversationResponse(BaseModel):
     updated_history: List[Message]
     case_details: CaseDetails
 
+class User(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
 class MilvusHandler:
     def __init__(self):
         self.milvus_client = MilvusClient("./milvus_demo.db")
@@ -117,7 +160,6 @@ class MilvusHandler:
 
         if self.milvus_client.has_collection(collection_name=self.collection_name):
             print("collection is existing!")
-
         else: 
             self.milvus_client.create_collection(
                 collection_name=self.collection_name, 
@@ -261,11 +303,6 @@ def insert_case_details(case_details: CaseDetails):
     conn.close()
     return True
 
-from datetime import datetime
-
-# Example appointment input
-appointment_date_time = datetime(2025, 5, 21, 16, 0)
-
 def validate_date(input_date: datetime | str) -> bool:
     if input_date == "":
         return True
@@ -299,12 +336,66 @@ def validate_email(email: str) -> bool:
     pattern = r"^[\w\.\+\-]+@[\w\.\-]+\.[a-zA-Z]{2,}$"
     return re.fullmatch(pattern, email) is not None
 
+# User authentication functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def get_user(email: str):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    return user
+
+def authenticate_user(email: str, password: str):
+    user = get_user(email)
+    if not user:
+        return False
+    if not verify_password(password, user['hashed_password']):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = TokenData(email=email)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(email=token_data.email)
+    if user is None:
+        raise credentials_exception
+    return user
+
 @app.post("/chat", response_model=ConversationResponse)
-async def chat(request: ConversationRequest):
+@limiter.limit("5/minute")
+async def chat(request: Request, conversation_request: ConversationRequest):
     try:
         # Prepare the conversation history
-        conversation = [{"role": msg.role, "content": msg.content} for msg in request.conversation_history]
-        conversation.append({"role": "user", "content": request.user_input})
+        conversation = [{"role": msg.role, "content": msg.content} for msg in conversation_request.conversation_history]
+        conversation.append({"role": "user", "content": conversation_request.user_input})
 
         # Generate response using the AssistantAgent
         logger.debug("Generating reply using AssistantAgent")
@@ -313,21 +404,19 @@ async def chat(request: ConversationRequest):
         logger.debug(f"AssistantAgent response: {ai_response}")
         
         # Update conversation history
-        updated_history = request.conversation_history + [
-            Message(role="user", content=request.user_input),
+        updated_history = conversation_request.conversation_history + [
+            Message(role="user", content=conversation_request.user_input),
             Message(role="assistant", content=ai_response)
         ]
         
         case_details = extract_case_details(updated_history)
 
         print("case details : ", case_details)        
-                
         
         print("type >>>>>>>>>>>>>>>>", type(case_details.email_address))
 
         # Check if the appointment date is in the past
         if(validate_date(case_details.appointment_date_time) == False):
-
             print("fffffffffffffffddddddddddate", case_details.appointment_date_time)
             ai_response = "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"   
             return ConversationResponse(
@@ -336,8 +425,6 @@ async def chat(request: ConversationRequest):
                 case_details=case_details
             )
 
-        # if case_details.appointment_date_time is None and any(msg.content.lower().find("appointment") != -1 for msg in updated_history):
-        #     ai_response += "\n\nI apologize, but it seems the appointment date you provided is in the past. Could you please provide a future date and time for the appointment?"
         if(validate_email(case_details.email_address) == False):
             print ("email address >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Invalide <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
             ai_response = "The email address you entered appears to be invalid. Please provide a valid email address."
@@ -439,7 +526,7 @@ def send_confirmation_email(email_address: str, appointment_date_time: datetime)
     return True
 
 @app.get("/case_details")
-async def get_case_details():
+async def get_case_details(current_user: User = Depends(get_current_user)):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("SELECT * FROM case_details ORDER BY created_at DESC")
@@ -447,6 +534,166 @@ async def get_case_details():
     cur.close()
     conn.close()
     return {"case_details": case_details}
+
+# Create operation
+@app.post("/case_details", response_model=CaseDetails)
+async def create_case_detail(case_detail: CaseDetails, current_user: User = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        INSERT INTO case_details (inquiry, name, mobile_number, email_address, appointment_date_time, category_text, divide_text)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, inquiry, name, mobile_number, email_address, appointment_date_time, category_text, divide_text
+        """, (
+            case_detail.inquiry,
+            case_detail.name,
+            case_detail.mobile_number,
+            case_detail.email_address,
+            case_detail.appointment_date_time,
+            case_detail.category_text,
+            case_detail.divide_text
+        ))
+        new_case_detail = cur.fetchone()
+        conn.commit()
+        return CaseDetails(**new_case_detail)
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# Read operation for a single case detail
+@app.get("/case_details/{case_id}", response_model=CaseDetails)
+async def read_case_detail(case_id: int, current_user: User = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM case_details WHERE id = %s", (case_id,))
+        case_detail = cur.fetchone()
+        if case_detail is None:
+            raise HTTPException(status_code=404, detail="Case detail not found")
+        return CaseDetails(**case_detail)
+    finally:
+        cur.close()
+        conn.close()
+
+# Update operation
+@app.put("/case_details/{case_id}", response_model=CaseDetails)
+async def update_case_detail(case_id: int, case_detail: CaseDetails, current_user: User = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        UPDATE case_details
+        SET inquiry = %s, name = %s, mobile_number = %s, email_address = %s, 
+            appointment_date_time = %s, category_text = %s, divide_text = %s
+        WHERE id = %s
+        RETURNING id, inquiry, name, mobile_number, email_address, appointment_date_time, category_text, divide_text
+        """, (
+            case_detail.inquiry,
+            case_detail.name,
+            case_detail.mobile_number,
+            case_detail.email_address,
+            case_detail.appointment_date_time,
+            case_detail.category_text,
+            case_detail.divide_text,
+            case_id
+        ))
+        updated_case_detail = cur.fetchone()
+        if updated_case_detail is None:
+            raise HTTPException(status_code=404, detail="Case detail not found")
+        conn.commit()
+        return CaseDetails(**updated_case_detail)
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# Delete operation
+@app.delete("/case_details/{case_id}", response_model=dict)
+async def delete_case_detail(case_id: int, current_user: User = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM case_details WHERE id = %s RETURNING id", (case_id,))
+        deleted_case = cur.fetchone()
+        if deleted_case is None:
+            raise HTTPException(status_code=404, detail="Case detail not found")
+        conn.commit()
+        return {"message": f"Case detail with id {case_id} has been deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# Read all operation with pagination
+@app.get("/case_details", response_model=List[CaseDetails])
+async def read_case_details(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(get_current_user)
+):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM case_details ORDER BY created_at DESC OFFSET %s LIMIT %s", (skip, limit))
+        case_details = cur.fetchall()
+        return [CaseDetails(**case) for case in case_details]
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.post("/register", response_model=Token)
+@limiter.limit("5/minute")
+async def register_user(request: Request, user: User):
+    db_user = get_user(user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed_password = get_password_hash(user.password)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO users (email, hashed_password) VALUES (%s, %s)", (user.email, hashed_password))
+    conn.commit()
+    cur.close()
+    conn.close()
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/token", response_model=Token)
+@limiter.limit("5/minute")
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user['email']}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@app.post("/logout")
+async def logout(current_user: User = Depends(get_current_user)):
+    # In a stateless JWT-based authentication system, we can't invalidate the token on the server side.
+    # Instead, we'll return a success message and the client should remove the token from local storage.
+    return {"message": "Successfully logged out"}
 
 if __name__ == "__main__":
     import uvicorn
