@@ -403,18 +403,16 @@ If any information is not available, leave it as an empty string."""
             logger.error("No valid JSON found in extraction content")
             return CaseDetails()
         
-        # if extracted_data["appointment_date_time"]:
-        #     appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"]).replace(tzinfo=timezone.utc)
-        #     current_datetime = datetime.now(timezone.utc)
-            
-            # Check if the appointment date is in the past
-        #     if appointment_datetime < current_datetime:
-        #         logger.warning("Appointment date is in the past. Setting appointment_date_time to None.")
-        #         extracted_data["appointment_date_time"] = None
-        #     else:
-        #         extracted_data["appointment_date_time"] = appointment_datetime
-        # else:
-        #     extracted_data["appointment_date_time"] = None
+        # Parse appointment_date_time if it's not empty
+        if extracted_data["appointment_date_time"]:
+            try:
+                appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"])
+                extracted_data["appointment_date_time"] = appointment_datetime
+            except ValueError:
+                logger.warning("Invalid appointment_date_time format. Setting to None.")
+                extracted_data["appointment_date_time"] = None
+        else:
+            extracted_data["appointment_date_time"] = None
         
         logger.info(f"Successfully extracted case details: {extracted_data}")
         return CaseDetails(**extracted_data)
