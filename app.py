@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
@@ -119,6 +119,7 @@ class ConversationRequest(BaseModel):
     conversation_history: List[Message] = []
 
 class CaseDetails(BaseModel):
+    id: Optional[int] = None
     inquiry: str = ""
     name: str = ""
     mobile_number: str = ""
@@ -142,6 +143,10 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+class ChangeCredentialRequest(BaseModel):
+    new_email: EmailStr
+    new_password: str = Field(..., min_length=8)
 
 class MilvusHandler:
     def __init__(self):
@@ -388,6 +393,27 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if user is None:
         raise credentials_exception
     return user
+
+# Set default credential
+DEFAULT_EMAIL = "alvin2525@gmail.com"
+DEFAULT_PASSWORD = "alvin123456"
+
+def set_default_credential():
+    user = get_user(DEFAULT_EMAIL)
+    if not user:
+        hashed_password = get_password_hash(DEFAULT_PASSWORD)
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (email, hashed_password) VALUES (%s, %s)", (DEFAULT_EMAIL, hashed_password))
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info(f"Default credential set for {DEFAULT_EMAIL}")
+    else:
+        logger.info(f"Default credential already exists for {DEFAULT_EMAIL}")
+
+# Call this function when the app starts
+set_default_credential()
 
 @app.post("/chat", response_model=ConversationResponse)
 @limiter.limit("5/minute")
@@ -694,6 +720,28 @@ async def logout(current_user: User = Depends(get_current_user)):
     # In a stateless JWT-based authentication system, we can't invalidate the token on the server side.
     # Instead, we'll return a success message and the client should remove the token from local storage.
     return {"message": "Successfully logged out"}
+
+@app.post("/change_credential")
+async def change_credential(request: ChangeCredentialRequest, current_user: User = Depends(get_current_user)):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        hashed_password = get_password_hash(request.new_password)
+        cur.execute("""
+        UPDATE users
+        SET email = %s, hashed_password = %s
+        WHERE email = %s
+        """, (request.new_email, hashed_password, current_user['email']))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        conn.commit()
+        return {"message": "Credential updated successfully"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__ == "__main__":
     import uvicorn
