@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
@@ -501,7 +500,7 @@ async def get_case_details(current_user: User = Depends(get_current_user)):
 @app.post("/case_details", response_model=CaseDetails)
 async def create_case_detail(case_detail: CaseDetails, current_user: User = Depends(get_current_user)):
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cur.execute("""
         INSERT INTO case_details (inquiry, name, mobile_number, email_address, appointment_date_time, category_text, divide_text)
@@ -673,7 +672,8 @@ async def change_credential(request: ChangeCredentialRequest, current_user: User
         """, (request.new_email, hashed_password, current_user['email']))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
-   
+        conn.commit()
+        return {"message": "Credentials updated successfully"}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
