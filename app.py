@@ -627,11 +627,14 @@ async def update_case_detail(case_id: int, case_detail: CaseDetails, current_use
             case_detail.divide_text,
             case_id
         ))
-        updated_case_detail = cur.fetchone()
-        if updated_case_detail is None:
+        row = cur.fetchone()
+        if row is None:
             raise HTTPException(status_code=404, detail="Case detail not found")
+        # Convert the tuple to a dictionary
+        columns = [desc[0] for desc in cur.description]
+        updated_case_detail = dict(zip(columns, row))
         conn.commit()
-        return CaseDetails(**updated_case_detail)
+        return updated_case_detail
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
