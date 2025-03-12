@@ -54,7 +54,8 @@ async def chat_endpoint(request: Request, conversation_request: ConversationRequ
 
 @app.get("/case_details", response_model=List[CaseDetails])
 async def get_case_details_endpoint(current_user: User = Depends(get_current_user)):
-    return await get_case_details()
+    case_details = await get_case_details()
+    return case_details['case_details'] if isinstance(case_details, dict) else case_details
 
 @app.post("/case_details", response_model=CaseDetails)
 async def create_case_detail_endpoint(case_detail: CaseDetails, current_user: User = Depends(get_current_user)):
