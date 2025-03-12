@@ -150,8 +150,6 @@ async def chat(conversation_request: ConversationRequest) -> ConversationRespons
             if search_result:
                 case_details.category_text = search_result[0][0]['entity']['text']
                 case_details.divide_text = search_result[0][0]['entity']['divide_text']
-            ai_response = ai_response + "\n" + "tag: " + case_details.category_text + "\n" + "division: " + case_details.divide_text + "\n"
-            logger.info(f"AI response with tags: {ai_response}")
             if insert_case_details(case_details):
                 schedule_call_back(case_details.appointment_date_time)
                 send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
