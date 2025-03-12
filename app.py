@@ -107,7 +107,7 @@ async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequ
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user['email']}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -131,7 +131,7 @@ async def change_credential(request: ChangeCredentialRequest, current_user: User
         UPDATE users
         SET email = %s, hashed_password = %s
         WHERE email = %s
-        """, (request.new_email, hashed_password, current_user['email']))
+        """, (request.new_email, hashed_password, current_user.email))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="User not found")
         conn.commit()
