@@ -4,12 +4,12 @@ import os
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
-def send_email(from_email: str, to_email: str, subject: str, contents: str, case_category: str, division: str):
+def send_email(contents: str, to_email: str, from_email: str = "alvin20252528@gmail.com",  subject: str = "SSG CALL BACK") -> None:
     message = Mail(
         from_email=from_email,
         to_emails=to_email,
         subject=subject,
-        html_content=f"<div><strong>{contents}</strong><br><br><br><span>case category: {case_category}</span> <span>division: {division}</span> </div>")
+        html_content=f"<div><strong>{contents}</strong></div>")
     try:
         sg = SendGridAPIClient(os.environ.get('SENDGRID_API_KEY'))
         response = sg.send(message)
@@ -17,4 +17,4 @@ def send_email(from_email: str, to_email: str, subject: str, contents: str, case
         print(response.body)
         print(response.headers)
     except Exception as e:
-        print(e.message)
+        print(str(e))  # Changed e.message to str(e) for better compatibility
