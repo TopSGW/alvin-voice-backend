@@ -81,7 +81,7 @@ def send_confirmation_email(email_address: str, appointment_date_time: datetime)
     )
     
     # The actual email sending logic goes here.
-    send_email(to_email=email_address, content=content)
+    send_email(contents=content, to_email=email_address)
 
     logger.info(f"Confirmation email sent to {email_address} for appointment at {appointment_date_time}")
     return True
