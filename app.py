@@ -39,7 +39,9 @@ app.add_middleware(
 create_tables()
 
 # Set default credential when the app starts
-set_default_credential()
+DEFAULT_EMAIL = "alvin2525@gmail.com"
+DEFAULT_PASSWORD = "alvin123456"
+set_default_credential(email=DEFAULT_EMAIL, password=DEFAULT_PASSWORD)
 
 # Load category and divide text data into Milvus when the application starts
 # Uncomment the following line when ready to load data into Milvus
