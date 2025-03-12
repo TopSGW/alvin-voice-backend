@@ -37,6 +37,10 @@ class User(BaseModel):
 class UserInDB(User):
     hashed_password: str
 
+class ChangeCredentialRequest(BaseModel):
+    new_email: EmailStr
+    new_password: str
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
