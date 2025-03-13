@@ -31,7 +31,7 @@ class OpenAIHandler:
             model=model,
             messages=messages
         )
-        return response
+        return response.choices[0].message.content
 
     async def aemb_text(self, text):
         response = await self.client.embeddings.create(
