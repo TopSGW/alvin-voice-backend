@@ -105,7 +105,7 @@ async def chat(conversation_request: ConversationRequest) -> ConversationRespons
             Message(role="assistant", content=ai_response)
         ]
         
-        case_details = extract_case_details(updated_history)
+        case_details = await extract_case_details(updated_history)
 
         logger.info(f"Extracted case details: {case_details}")
 
