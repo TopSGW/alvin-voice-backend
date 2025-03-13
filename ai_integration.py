@@ -66,13 +66,13 @@ async def load_category_and_divide_text():
 # Call this function when the application starts
 # await load_category_and_divide_text()
 
-def schedule_call_back(appointment_date_time: datetime) -> bool:
+async def schedule_call_back(appointment_date_time: datetime) -> bool:
     # This is a placeholder function. In a real-world scenario, you would implement
     # the actual scheduling logic here, possibly integrating with a calendar system.
     logger.info(f"Call back scheduled for: {appointment_date_time}")
     return True
 
-def send_confirmation_email(email_address: str, appointment_date_time: datetime) -> bool:
+async def send_confirmation_email(email_address: str, appointment_date_time: datetime) -> bool:
  
     # The actual email sending logic goes here.
     send_email(appointment_date_time=appointment_date_time, to_email=email_address)
