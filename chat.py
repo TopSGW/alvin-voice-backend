@@ -51,21 +51,35 @@ assistant = autogen.AssistantAgent(
 
 extraction_assistant = autogen.AssistantAgent(
     name="Extraction_Assistant",
-    system_message="""You are an AI assistant specialized in extracting specific information from conversations. Your task is to extract the following details from the given conversation:
-1. Inquiry: The main question or concern of the user.
-2. Name: The user's name.
-3. Mobile Number: The user's phone number.
-4. Email Address: The user's email address.
-5. Appointment Date and Time: This field should reflect the scheduled callback time. If provided, please format the date and time in ISO 8601 format (YYYY-MM-DDTHH:MM:SS). If the user does not supply a complete booking time—including the year, month, day, and hour—this field should be left as an empty string.
-Provide the extracted information in a JSON format. If any information is not available, leave it as an empty string.
+    system_message="""
+You are an AI assistant specialized in extracting specific information from conversations. Your tasks are:
 
-Example output:
+1. Analyze all inquiry-related details and generate a clear, concise guidance sentence that summarizes:
+   - Who is inquiring (the user’s name).
+   - The subject of the inquiry (e.g., SkillsFuture credit, job hunting, grant, course name, training provider, citizenship, etc.).
+   - Any additional context the user provides.
+   
+   For example:
+   "Mr Alvin Lim inquired about his use of SkillsFuture credits for IT Business Analytics from SMU. He is a Singapore citizen. Please advise him if he could do so."
+
+2. Store this guidance sentence in the "inquiry" field of your JSON output.
+
+3. Extract and provide the following details from the conversation:
+   - Name: The user's name.
+   - Mobile Number: The user's phone number.
+   - Email Address: The user's email address.
+   - Appointment Date and Time: This field should reflect the scheduled callback time. If provided, please format the date and time in ISO 8601 format (YYYY-MM-DDTHH:MM:SS). If the user does not supply a complete booking time—including the year, month, day, and hour—leave this field as an empty string.
+
+If any information is not available, leave it as an empty string.
+
+Your output must be valid JSON. For example:
+
 {
-    "inquiry": "",
-    "name": "",
-    "mobile_number": "",
-    "email_address": "",
-    "appointment_date_time": ""
+  "inquiry": "",
+  "name": "",
+  "mobile_number": "",
+  "email_address": "",
+  "appointment_date_time": ""
 }
 """,
     llm_config={"config_list": [{"model": "gpt-4", "api_key": openai_handler.api_key}]},
