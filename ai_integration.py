@@ -12,21 +12,39 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+import os
+from openai import AsyncOpenAI
+
 class OpenAIHandler:
-    def __init__(self):
+    def __init__(self, system_prompt: str = ""):
         self.api_key = os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = AsyncOpenAI(api_key=self.api_key)
+        self.system_prompt = system_prompt
 
-    def emb_text(self, text):
-        return self.client.embeddings.create(input=text, model="text-embedding-3-small").data[0].embedding
+    async def agenerate_chat_completion(self, messages, model="gpt-4"):
+        if self.system_prompt:
+            messages = [{"role": "system", "content": self.system_prompt}] + messages
+        
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages
+        )
+        return response
+
+    async def aemb_text(self, text):
+        response = await self.client.embeddings.create(
+            input=text,
+            model="text-embedding-3-small"
+        )
+        return response.data[0].embedding
 
 # Initialize OpenAI and Milvus handlers
 openai_handler = OpenAIHandler()
 milvus_handler = MilvusHandler()
 
-def load_category_and_divide_text():
+async def load_category_and_divide_text():
     with open("category.txt", "r", encoding="utf-8") as f:
         category_contents = [line.strip() for line in f if line.strip()]
     
@@ -35,7 +53,7 @@ def load_category_and_divide_text():
     
     vector_data = []
     for content, divide_text in zip(category_contents, divide_contents):
-        embedding_val = openai_handler.emb_text(content)
+        embedding_val = await openai_handler.emb_text(content)
         vector_data.append({
             "text": content,
             "vector": embedding_val,
@@ -46,7 +64,7 @@ def load_category_and_divide_text():
     logger.info(f"Loaded {len(vector_data)} items into Milvus")
 
 # Call this function when the application starts
-# load_category_and_divide_text()
+# await load_category_and_divide_text()
 
 def schedule_call_back(appointment_date_time: datetime) -> bool:
     # This is a placeholder function. In a real-world scenario, you would implement

@@ -4,10 +4,9 @@ from typing import List, Optional
 from datetime import datetime
 import json
 import logging
-import autogen
+import asyncio
 from case_details import CaseDetails, insert_case_details
-from ai_integration import openai_handler, milvus_handler, schedule_call_back, send_confirmation_email
-from mail_send import send_email
+from ai_integration import openai_handler, milvus_handler, schedule_call_back, send_confirmation_email, OpenAIHandler
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -43,15 +42,10 @@ You are an AI guidance helper bot for the Skillsfuture and Workforce Singapore h
 7. Be adaptive and responsive to the user's needs, without asking multiple questions at once.
 """
 
-assistant = autogen.AssistantAgent(
-    name="SkillsFuture_Assistant",
-    system_message=system_prompt,
-    llm_config={"config_list": [{"model": "gpt-4", "api_key": openai_handler.api_key}]},
-)
+assistant = OpenAIHandler(system_prompt=system_prompt)
 
-extraction_assistant = autogen.AssistantAgent(
-    name="Extraction_Assistant",
-    system_message="""
+extraction_assistant = OpenAIHandler(
+    system_prompt="""
 You are an AI assistant specialized in extracting specific information from conversations. Your tasks are:
 
 1. Analyze all inquiry-related details and generate a clear, concise guidance sentence that summarizes:
@@ -82,43 +76,17 @@ Your output must be valid JSON. For example:
   "appointment_date_time": ""
 }
 """,
-    llm_config={"config_list": [{"model": "gpt-4", "api_key": openai_handler.api_key}]},
 )
 
-def validate_date(input_date: datetime | str) -> bool:
-    if input_date == "":
+def validate_date(input_date: Optional[datetime]) -> bool:
+    if not input_date:
         return True
-
-    if input_date is None:
-        return True
-
-    # Determine local timezone from current time
-    local_tz = datetime.now().astimezone().tzinfo
-
-    # If input_date is naive, assume it's in local time
-    if isinstance(input_date, datetime):
-        if input_date.tzinfo is None:
-            input_date = input_date.replace(tzinfo=local_tz)
-        else:
-            input_date = input_date.astimezone(local_tz)
-
-    current_datetime = datetime.now(local_tz)
-
-    # Return True if input_date is in the future (ignoring 24-hour window)
-    return input_date > current_datetime
+    return input_date.replace(tzinfo=None) > datetime.now()
 
 def validate_email(email: str) -> bool:
-    if email == "":     
-        return True
-    """
-    Returns True if the given email matches a basic validation pattern,
-    otherwise returns False.
-    """
     import re
-    # Regex pattern: one or more allowed characters in the local part,
-    # then an '@', then allowed domain characters and a TLD of at least 2 letters.
     pattern = r"^[\w\.\+\-]+@[\w\.\-]+\.[a-zA-Z]{2,}$"
-    return re.fullmatch(pattern, email) is not None
+    return email == "" or re.fullmatch(pattern, email) is not None
 
 async def chat(conversation_request: ConversationRequest) -> ConversationResponse:
     try:
@@ -128,8 +96,7 @@ async def chat(conversation_request: ConversationRequest) -> ConversationRespons
 
         # Generate response using the AssistantAgent
         logger.debug("Generating reply using AssistantAgent")
-        response = assistant.generate_reply(conversation)
-        ai_response = response
+        ai_response = await assistant.agenerate_chat_completion(conversation)
         logger.debug(f"AssistantAgent response: {ai_response}")
         
         # Update conversation history
@@ -164,14 +131,16 @@ async def chat(conversation_request: ConversationRequest) -> ConversationRespons
         # Insert case details if all fields are non-empty
         if all([case_details.inquiry, case_details.name, case_details.mobile_number, case_details.email_address, case_details.appointment_date_time]):
             # Get category and divide text using Milvus
-            embedding = openai_handler.emb_text(case_details.inquiry)
+            embedding = await openai_handler.aemb_text(case_details.inquiry)
             search_result = milvus_handler.search(embedding)
             if search_result:
                 case_details.category_text = search_result[0][0]['entity']['text']
                 case_details.divide_text = search_result[0][0]['entity']['divide_text']
             if insert_case_details(case_details):
-                schedule_call_back(case_details.appointment_date_time)
-                send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
+                await asyncio.gather(
+                    schedule_call_back(case_details.appointment_date_time),
+                    send_confirmation_email(case_details.email_address, case_details.appointment_date_time)
+                )
         
         return ConversationResponse(
             ai_response=ai_response,
@@ -182,7 +151,7 @@ async def chat(conversation_request: ConversationRequest) -> ConversationRespons
         logger.error(f"Error in chat function: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-def extract_case_details(conversation_history: List[Message]) -> CaseDetails:
+async def extract_case_details(conversation_history: List[Message]) -> CaseDetails:
     conversation_text = "\n".join([f"{msg.role}: {msg.content}" for msg in conversation_history])
     extraction_prompt = f"""Please extract the case details from the following conversation:
 
@@ -200,45 +169,15 @@ If any information is not available, leave it as an empty string."""
     
     logger.debug(f"Extraction prompt: {extraction_prompt}")
     
-    extraction_result = extraction_assistant.generate_reply(messages=[{"role": "user", "content": extraction_prompt}])
-    logger.debug(f"Raw extraction result: {extraction_result}")
-    
-    extraction_content = extraction_result[1] if isinstance(extraction_result, tuple) and len(extraction_result) > 1 else extraction_result
-    logger.debug(f"Extraction content: {extraction_content}")
-    
+    extraction_result = await extraction_assistant.agenerate_chat_completion(messages=[{"role": "user", "content": extraction_prompt}])
     try:
-        if not extraction_content or not extraction_content.strip():
-            logger.error("Extraction result is empty")
-            return CaseDetails()
-        
-        # Try to find JSON content within the extraction result
-        json_start = extraction_content.find('{')
-        json_end = extraction_content.rfind('}') + 1
-        if json_start != -1 and json_end != -1:
-            json_content = extraction_content[json_start:json_end]
-            logger.debug(f"Extracted JSON content: {json_content}")
-            extracted_data = json.loads(json_content)
+        data = json.loads(extraction_result)
+        appointment = data.get("appointment_date_time", "")
+        if appointment:
+            data["appointment_date_time"] = datetime.fromisoformat(appointment)
         else:
-            logger.error("No valid JSON found in extraction content")
-            return CaseDetails()
-        
-        # Parse appointment_date_time if it's not empty
-        if extracted_data["appointment_date_time"]:
-            try:
-                appointment_datetime = datetime.fromisoformat(extracted_data["appointment_date_time"])
-                extracted_data["appointment_date_time"] = appointment_datetime
-            except ValueError:
-                logger.warning("Invalid appointment_date_time format. Setting to None.")
-                extracted_data["appointment_date_time"] = None
-        else:
-            extracted_data["appointment_date_time"] = None
-        
-        logger.info(f"Successfully extracted case details: {extracted_data}")
-        return CaseDetails(**extracted_data)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON: {str(e)}")
-        logger.error(f"Invalid JSON content: {extraction_content}")
-        return CaseDetails()
-    except ValueError as e:
-        logger.error(f"Error processing extraction result: {str(e)}")
+            data["appointment_date_time"] = None
+        return CaseDetails(**data)
+    except Exception as e:
+        logger.error(f"Extraction error: {e}")
         return CaseDetails()
