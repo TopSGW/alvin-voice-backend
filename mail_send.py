@@ -11,7 +11,7 @@ def ordinal(n: int) -> str:
         suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
     return f"{n}{suffix}"
 
-def send_email(
+async def send_email(
     appointment_date_time: datetime,
     to_email: str,
     from_email: str = "alvin20252528@gmail.com",
