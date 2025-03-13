@@ -48,15 +48,6 @@ def load_category_and_divide_text():
 # Call this function when the application starts
 # load_category_and_divide_text()
 
-def ordinal(n: int) -> str:
-    """Return the ordinal string of an integer (e.g., 1 -> '1st', 2 -> '2nd')."""
-    if 10 <= n % 100 <= 20:
-        suffix = 'th'
-    else:
-        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-    return f"{n}{suffix}"
-
-
 def schedule_call_back(appointment_date_time: datetime) -> bool:
     # This is a placeholder function. In a real-world scenario, you would implement
     # the actual scheduling logic here, possibly integrating with a calendar system.
@@ -64,24 +55,9 @@ def schedule_call_back(appointment_date_time: datetime) -> bool:
     return True
 
 def send_confirmation_email(email_address: str, appointment_date_time: datetime) -> bool:
-    # This is a placeholder function. In a real-world scenario, you would implement
-    formatted_date_time = (
-        f"{appointment_date_time.strftime('%B')} "  # Full month name, e.g., May
-        f"{ordinal(appointment_date_time.day)}, "    # Day with ordinal suffix, e.g., 1st
-        f"{appointment_date_time.year} at "           # Year and literal 'at'
-        f"{appointment_date_time.hour % 12 or 12} "     # 12-hour format hour without leading zero
-        f"{'AM' if appointment_date_time.hour < 12 else 'PM'}"  # AM/PM
-    )
-    
-    content = (
-        "Dear Customer,\n\n"
-        f"Thank you for scheduling a callback with our officer. We have arranged a callback on {formatted_date_time}.\n\n"
-        "If you have any questions or need to reschedule, please let us know.\n\n"
-        "Best regards,\n"
-    )
-    
+ 
     # The actual email sending logic goes here.
-    send_email(contents=content, to_email=email_address)
+    send_email(appointment_date_time=appointment_date_time, to_email=email_address)
 
     logger.info(f"Confirmation email sent to {email_address} for appointment at {appointment_date_time}")
     return True
