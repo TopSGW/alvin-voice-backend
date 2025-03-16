@@ -41,11 +41,11 @@ def insert_case_details(case_details: CaseDetails):
 async def get_case_details():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM case_details ORDER BY created_at DESC")
-    case_details = cur.fetchall()
+    cur.execute("SELECT COUNT(*) AS count FROM case_details")
+    count = cur.fetchone()  # count will be a dict like {'count': 42}
     cur.close()
     conn.close()
-    return {"case_details": case_details}
+    return count
 
 async def create_case_detail(case_detail: CaseDetails):
     conn = get_db_connection()
